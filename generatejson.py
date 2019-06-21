@@ -18,6 +18,7 @@
 # base-url/stage/file-name-of-item
 # Future plan for this tool is to add AWS S3 integration for auto-upload
 
+from __future__ import print_function
 import hashlib
 import json
 import argparse
@@ -30,11 +31,11 @@ from xml.dom import minidom
 def gethash(filename):
     hash_function = hashlib.sha256()
     if not os.path.isfile(filename):
-        return 'FILE NOT FOUND - CHECK YOUR PATH'
+        return "FILE NOT FOUND - CHECK YOUR PATH"
 
-    fileref = open(filename, 'rb')
+    fileref = open(filename, "rb")
     while 1:
-        chunk = fileref.read(2**16)
+        chunk = fileref.read(2 ** 16)
         if not chunk:
             break
         hash_function.update(chunk)
@@ -43,26 +44,26 @@ def gethash(filename):
 
 
 def getpkginfopath(filename):
-    '''Extracts the package BOM with xar'''
-    cmd = ['/usr/bin/xar', '-tf', filename]
-    proc = subprocess.Popen(cmd,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
+    """Extracts the package BOM with xar"""
+    cmd = ["/usr/bin/xar", "-tf", filename]
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
     (bom, err) = proc.communicate()
-    bom = bom.strip().split('\n')
+    bom = bom.strip().split("\n")
     if proc.returncode == 0:
         for entry in bom:
-            if entry.startswith('PackageInfo'):
+            if entry.startswith("PackageInfo"):
                 return entry
-            elif entry.endswith('.pkg/PackageInfo'):
+            elif entry.endswith(".pkg/PackageInfo"):
                 return entry
     else:
-        print "Error: %s while extracting BOM for %s" % (err, filename)
+        print("Error: %s while extracting BOM for %s" % (err, filename))
 
 
 def extractpkginfo(filename):
-    '''Takes input of a file path and returns a file path to the
-    extracted PackageInfo file.'''
+    """Takes input of a file path and returns a file path to the
+    extracted PackageInfo file."""
     if not os.path.isfile(filename):
         return
     else:
@@ -72,47 +73,68 @@ def extractpkginfo(filename):
 
         extractedPkgInfoPath = os.path.join(tmpFolder, pkgInfoPath)
         cmd = [
-            '/usr/bin/xar',
-            '-x',
-            '-C', tmpFolder,
-            '-f', filename,
-            pkgInfoPath]
-        proc = subprocess.Popen(cmd,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE)
+            "/usr/bin/xar",
+            "-x",
+            "-C",
+            tmpFolder,
+            "-f",
+            filename,
+            pkgInfoPath,
+        ]
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
         out, err = proc.communicate()
         return extractedPkgInfoPath
 
 
 def getpkginfo(filename):
-    '''Takes input of a file path and returns strings of the
-    package identifier and version from PackageInfo.'''
+    """Takes input of a file path and returns strings of the
+    package identifier and version from PackageInfo."""
     if not os.path.isfile(filename):
         return "", ""
 
     else:
         pkgInfoPath = extractpkginfo(filename)
         dom = minidom.parse(pkgInfoPath)
-        pkgRefs = dom.getElementsByTagName('pkg-info')
+        pkgRefs = dom.getElementsByTagName("pkg-info")
         for ref in pkgRefs:
-            pkgId = ref.attributes['identifier'].value.encode('UTF-8')
-            pkgVersion = ref.attributes['version'].value.encode('UTF-8')
+            pkgId = ref.attributes["identifier"].value.encode("UTF-8")
+            pkgVersion = ref.attributes["version"].value.encode("UTF-8")
             return pkgId, pkgVersion
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--base-url', default=None, action='store',
-                        help='Base URL to where root dir is hosted')
-    parser.add_argument('--output', default=None, action='store',
-                        help='Required: Output directory to save json')
-    parser.add_argument('--item', default=None, action='append', nargs=6,
-                        metavar=(
-                            'item-name', 'item-path', 'item-stage',
-                            'item-type', 'item-url', 'script-do-not-wait'),
-                        help='Required: Options for item. All items are \
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        action="store",
+        help="Base URL to where root dir is hosted",
+    )
+    parser.add_argument(
+        "--output",
+        default=None,
+        action="store",
+        help="Required: Output directory to save json",
+    )
+    parser.add_argument(
+        "--item",
+        default=None,
+        action="append",
+        nargs=6,
+        metavar=(
+            "item-name",
+            "item-path",
+            "item-stage",
+            "item-type",
+            "item-url",
+            "script-do-not-wait",
+        ),
+        help="Required: Options for item. All items are \
                         required. Scripts default to rootscript and stage \
-                        Scripts default to rootscript and stage defaults to userland')
+                        Scripts default to rootscript and stage defaults to userland",
+    )
     args = parser.parse_args()
 
     # Bail if we don't have one item, the base url and the output dir
@@ -126,123 +148,142 @@ def main():
     for item in args.item:
         processedItem = {}
         for itemOption in item:
-            values = itemOption.split('=')
+            values = itemOption.split("=")
             processedItem[values[0]] = values[1]
         itemsToProcess.append(processedItem)
 
     # Create our stages now so InstallApplications won't blow up
-    stages = {
-        'preflight': [],
-        'setupassistant': [],
-        'userland': []
-    }
+    stages = {"preflight": [], "setupassistant": [], "userland": []}
 
     # Process each item in the order they were passed in
     for item in itemsToProcess:
         itemJson = {}
         # Get the file extension of the file
-        fileExt = os.path.splitext(item['item-path'])[1]
+        fileExt = os.path.splitext(item["item-path"])[1]
         # Get the file name of the file
-        fileName = os.path.basename(item['item-path'])
+        fileName = os.path.basename(item["item-path"])
         # Get the full path of the file
-        filePath = item['item-path']
+        filePath = item["item-path"]
 
         # Determine the type of item to process - for scripts, default to
         # rootscript
-        if fileExt in ('.py', '.sh', '.rb', '.php'):
+        if fileExt in (".py", ".sh", ".rb", ".php"):
             try:
-                itemJson['type'] = itemType = item['item-type']
+                itemJson["type"] = itemType = item["item-type"]
             except KeyError:
-                itemJson['type'] = itemType = 'rootscript'
-        elif fileExt == '.pkg':
-            itemJson['type'] = itemType = 'package'
+                itemJson["type"] = itemType = "rootscript"
+        elif fileExt == ".pkg":
+            itemJson["type"] = itemType = "package"
         else:
-            print 'Could not determine package type for item or unsupported: \
-            %s' % str(item)
+            print(
+                "Could not determine package type for item or "
+                "unsupported: %s" % str(item)
+            )
             exit(1)
-        if itemType not in ('package', 'rootscript', 'userscript'):
-            print 'item-type malformed: %s' % str(item['item-type'])
+        if itemType not in ("package", "rootscript", "userscript"):
+            print("item-type malformed: %s" % str(item["item-type"]))
             exit(1)
 
         # Determine the stage of the item to process - default to userland
         try:
-            if item['item-stage'] in ('preflight', 'setupassistant',
-                                      'userland'):
-                itemStage = item['item-stage']
+            if item["item-stage"] in (
+                "preflight",
+                "setupassistant",
+                "userland",
+            ):
+                itemStage = item["item-stage"]
                 pass
             else:
-                print 'item-stage malformed: %s' % str(item['item-stage'])
+                print("item-stage malformed: %s" % str(item["item-stage"]))
                 exit(1)
         except KeyError:
-            itemStage = 'userland'
+            itemStage = "userland"
 
         # Determine the url of the item to process - defaults to
         # baseurl/stage/filename
         try:
-            itemJson['url'] = item['item-url']
+            itemJson["url"] = item["item-url"]
         except KeyError:
-            itemJson['url'] = '%s/%s/%s' % (args.base_url, itemStage, fileName)
+            itemJson["url"] = "%s/%s/%s" % (
+                args.base_url,
+                itemStage,
+                fileName,
+            )
 
         # Determine the name of the item to process - defaults to the filename
-        if not item['item-name']:
-            itemJson['name'] = fileName
+        if not item["item-name"]:
+            itemJson["name"] = fileName
         else:
-            itemJson['name'] = item['item-name']
+            itemJson["name"] = item["item-name"]
 
         # Determine the hash of the item to process - SHA256
-        itemJson['hash'] = gethash(filePath)
+        itemJson["hash"] = gethash(filePath)
 
         # Add information for scripts and packages
-        if itemType in ('rootscript', 'userscript'):
-            if itemType == 'userscript':
+        if itemType in ("rootscript", "userscript"):
+            if itemType == "userscript":
                 # Pass the userscripts folder path
-                itemJson['file'] = '/Library/Application Support/'\
-                    'installapplications/userscripts/%s' % fileName
+                itemJson["file"] = (
+                    "/Library/Application Support/"
+                    "installapplications/userscripts/%s" % fileName
+                )
             else:
-                itemJson['file'] = '/Library/Application Support/'\
-                    'installapplications/%s' % fileName
+                itemJson["file"] = (
+                    "/Library/Application Support/"
+                    "installapplications/%s" % fileName
+                )
             # Check crappy way of doing booleans
             try:
-                if item['script-do-not-wait'] in ('true', 'True', '1',
-                                              'false', 'False', '0'):
+                if item["script-do-not-wait"] in (
+                    "true",
+                    "True",
+                    "1",
+                    "false",
+                    "False",
+                    "0",
+                ):
                     # If True, pass the key to the item
-                    if item['script-do-not-wait'] in ('true', 'True', '1'):
-                        itemJson['donotwait'] = True
+                    if item["script-do-not-wait"] in ("true", "True", "1"):
+                        itemJson["donotwait"] = True
                 else:
-                    print 'script-do-not-wait malformed: %s ' % str(
-                    item['script-do-not-wait'])
+                    print(
+                        "script-do-not-wait malformed: %s "
+                        % str(item["script-do-not-wait"])
+                    )
                     exit(1)
             except:
-                itemJson['donotwait'] = False
+                itemJson["donotwait"] = False
 
         # If packages, we need the version and packageid
-        elif itemType == 'package':
+        elif itemType == "package":
             (pkgId, pkgVersion) = getpkginfo(filePath)
-            itemJson['file'] = '/Library/Application Support/'\
-                'installapplications/%s' % fileName
-            itemJson['packageid'] = pkgId
-            itemJson['version'] = pkgVersion
+            itemJson["file"] = (
+                "/Library/Application Support/"
+                "installapplications/%s" % fileName
+            )
+            itemJson["packageid"] = pkgId
+            itemJson["version"] = pkgVersion
 
         # Append the info to the appropriate stage
         stages[itemStage].append(itemJson)
 
     # Saving the json file to the output directory path
     if args.output:
-        savePath = os.path.join(args.output, 'bootstrap.json')
+        savePath = os.path.join(args.output, "bootstrap.json")
     else:
-        savePath = os.path.join(rootdir, 'bootstrap.json')
+        savePath = os.path.join(rootdir, "bootstrap.json")
 
     # Sort the primary keys, but not the sub keys, so things are in the correct
     # order
     try:
-        with open(savePath, 'w') as outFile:
+        with open(savePath, "w") as outFile:
             json.dump(stages, outFile, sort_keys=True, indent=2)
     except IOError:
-        print '[Error] Not a valid directory: %s' % savePath
+        print("[Error] Not a valid directory: %s" % savePath)
         exit(1)
 
-    print 'Json saved to %s' % savePath
+    print("Json saved to %s" % savePath)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
